@@ -62,13 +62,25 @@ jobs:
 
       - name: Create IPA manually
         run: |
+          set -euo pipefail
           mkdir -p build/ios/ipa
-          cd build/ios/Release-iphoneos
-          mkdir -p Payload
-          cp -R Runner.app Payload/
-          cd ..
-          /usr/bin/zip -qry ipa/cp_tracker.ipa Payload
-          cd ../../..
+          # Flutter outputs to build/ios/iphoneos by default for --no-codesign
+          APP_DIR="build/ios/iphoneos/Runner.app"
+          if [ ! -d "$APP_DIR" ]; then
+            echo "Runner.app not found at $APP_DIR"
+            echo "Available build/ios contents:"
+            ls -la build/ios || true
+            echo "Available iphoneos contents:"
+            ls -la build/ios/iphoneos || true
+            exit 1
+          fi
+          PAYLOAD_DIR="build/ios/iphoneos/Payload"
+          rm -rf "$PAYLOAD_DIR"
+          mkdir -p "$PAYLOAD_DIR"
+          cp -R "$APP_DIR" "$PAYLOAD_DIR/"
+          pushd build/ios/iphoneos >/dev/null
+          /usr/bin/zip -qry ../ipa/cp_tracker.ipa Payload
+          popd >/dev/null
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
