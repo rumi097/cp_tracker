@@ -1,0 +1,74 @@
+name: iOS IPA Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Select latest stable Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+          cache: true
+
+      - name: Precache iOS artifacts
+        run: flutter precache --ios
+
+      - name: Install Dart/Flutter dependencies
+        run: flutter pub get
+
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: |
+            ios/Pods
+            ~/.cocoapods
+          key: ${{ runner.os }}-pods-${{ hashFiles('ios/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
+
+      - name: Install CocoaPods
+        env:
+          COCOAPODS_DISABLE_STATS: 'true'
+        run: |
+          cd ios
+          pod install --repo-update
+          cd ..
+
+      - name: Build iOS (no codesign)
+        env:
+          CI: 'true'
+        run: flutter build ios --release --no-codesign
+
+      - name: Create IPA manually
+        run: |
+          mkdir -p build/ios/ipa
+          cd build/ios/Release-iphoneos
+          mkdir -p Payload
+          cp -R Runner.app Payload/
+          cd ..
+          /usr/bin/zip -qry ipa/lovenders.ipa Payload
+          cd ../../..
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: lovenders-ios-${{ github.run_number }}
+          path: build/ios/ipa/lovenders.ipa
+          retention-days: 30
